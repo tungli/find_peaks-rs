@@ -1,0 +1,23 @@
+[package]
+name = "find_peaks"
+version = "0.1.0"
+authors = ["tungli <tun@mail.muni.cz>"]
+license = "MIT"
+edition = "2018"
+repository = "https://github.com/tungli/find_peaks-rs.git"
+description = "Find peaks that match criteria in 1D data."
+homepage = "https://github.com/tungli/find_peaks-rs.git"
+build = false
+categories = ["science", "mathematics"]
+keywords = ["signal", "spectrum", "data-science", "prominence"]
+readme = "README.md"
+documentation = "https://docs.rs/find_peaks/"
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+
+[[example]]
+name = "spectrum"
+crate-type = ["bin"]
