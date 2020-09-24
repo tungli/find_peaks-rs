@@ -1,6 +1,6 @@
 [package]
 name = "find_peaks"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["tungli <tun@mail.muni.cz>"]
 license = "MIT"
 edition = "2018"

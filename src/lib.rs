@@ -95,7 +95,7 @@ where
                 zero: None,
             }
         } else {
-            let zero = Some(y_data[1].clone() - y_data[1].clone());
+            let zero = Some(y_data[0].clone() - y_data[0].clone());
             Self {
                 y_data,
                 height: Limits::empty(),
@@ -277,7 +277,7 @@ where
     /// );
     /// ```
     pub fn find_peaks(&self) -> Vec<Peak<T>> {
-        if self.y_data.is_empty() {
+        if [0, 1].contains(&self.y_data.len()) {
             return Vec::new();
         }
 
@@ -463,5 +463,29 @@ mod tests {
                 prominence: Some(5.)
             }]
         );
+    }
+
+    #[test]
+    fn empty_data() {
+        let y: Vec<u8> = vec![];
+        let ps = PeakFinder::new(&y).with_min_prominence(1).find_peaks();
+
+        assert_eq!(ps, Vec::new())
+    }
+
+    #[test]
+    fn single_point() {
+        let y: Vec<u32> = vec![1];
+        let ps = PeakFinder::new(&y).find_peaks();
+
+        assert_eq!(ps, vec![])
+    }
+
+    #[test]
+    fn two_points() {
+        let y: Vec<u32> = vec![2, 2];
+        let ps = PeakFinder::new(&y).find_peaks();
+
+        assert_eq!(ps, vec![])
     }
 }
