@@ -1,4 +1,5 @@
 use core::ops::Range;
+use std::borrow::Cow;
 
 /// Struct containing the information of a found peak.
 ///
@@ -69,35 +70,43 @@ where
 /// Setup for the peak filtering.
 ///
 /// Change the settings by using the methods for specifing the lower and upper bounds.
-#[derive(Debug, Clone)]
-pub struct PeakFinder<'a, T> {
+#[derive(Clone)]
+pub struct PeakFinder<'a, T, S>
+    where [S]: ToOwned
+{
     y_data: &'a [T],
+    x_data: Cow<'a, [S]>,
     height: Limits<T>,
     prominence: Limits<T>,
     difference: Limits<T>,
     plateau_size: Limits<usize>,
+    distance: Limits<S>,
     zero: Option<T>,
 }
 
-impl<'a, T> PeakFinder<'a, T>
+impl<'a, T> PeakFinder<'a, T, usize>
 where
-    T: Clone + std::ops::Sub<Output = T> + PartialOrd + std::fmt::Debug,
+    T: Clone + std::ops::Sub<Output = T> + PartialOrd
 {
     /// Initialize with a data slice.
     pub fn new(y_data: &'a [T]) -> Self {
+        let x: Vec<usize> = (0..y_data.len()).collect();
         if y_data.is_empty() {
             Self {
                 y_data,
+                x_data: Cow::from(x),
                 height: Limits::empty(),
                 prominence: Limits::empty(),
                 difference: Limits::empty(),
                 plateau_size: Limits::empty(),
+                distance: Limits::empty(),
                 zero: None,
             }
         } else {
             let zero = Some(y_data[0].clone() - y_data[0].clone());
             Self {
                 y_data,
+                x_data: Cow::from(x),
                 height: Limits::empty(),
                 prominence: Limits::empty(),
                 difference: Limits {
@@ -105,6 +114,44 @@ where
                     upper: None,
                 },
                 plateau_size: Limits::empty(),
+                distance: Limits::empty(),
+                zero,
+            }
+        }
+    }
+}
+
+impl<'a, T, S> PeakFinder<'a, T, S>
+where
+    T: Clone + std::ops::Sub<Output = T> + PartialOrd,
+    S: Clone + std::ops::Sub<Output = S> + PartialOrd,
+    [S]: ToOwned,
+{
+    pub fn new_with_x(y_data: &'a [T], x_data: &'a [S]) -> Self {
+        if y_data.is_empty() {
+            Self {
+                y_data,
+                x_data: Cow::from(x_data),
+                height: Limits::empty(),
+                prominence: Limits::empty(),
+                difference: Limits::empty(),
+                plateau_size: Limits::empty(),
+                distance: Limits::empty(),
+                zero: None,
+            }
+        } else {
+            let zero = Some(y_data[0].clone() - y_data[0].clone());
+            Self {
+                y_data,
+                x_data: Cow::from(x_data),
+                height: Limits::empty(),
+                prominence: Limits::empty(),
+                difference: Limits {
+                    lower: zero.clone(),
+                    upper: None,
+                },
+                plateau_size: Limits::empty(),
+                distance: Limits::empty(),
                 zero,
             }
         }
@@ -225,13 +272,44 @@ where
         })
     }
 
+    fn filter_distance(&self, mut peaks: Vec<Peak<T>>) -> Vec<Peak<T>>
+    {   
+        peaks.sort_unstable_by(|a, b| b.height.partial_cmp(&a.height).unwrap_or(std::cmp::Ordering::Equal));
+
+        let limit = &self.distance;
+        if limit.is_empty() {
+            return peaks;
+        }   
+
+        let mut filtered = Vec::with_capacity(peaks.len());
+        filtered.push(peaks[0].clone());
+
+        let x_data = &self.x_data;
+        let mut x_prev = x_data[peaks[0].middle_position()].clone();
+        for i in 1..peaks.len() {
+            let x = x_data[peaks[i].middle_position()].clone();
+            let dist = if x > x_prev {
+                x.clone() - x_prev.clone()
+            } else {
+                x_prev.clone() - x.clone()
+            };  
+            if limit.is_inside(&dist) {
+                filtered.push(peaks[i].clone());
+                x_prev = x.clone();
+            }   
+        }   
+
+        filtered.shrink_to_fit();
+        filtered
+    }  
+
     fn calc_prominence(&self, p: &Peak<T>) -> T {
         let i_left = p.position.start;
         let i_right = p.position.end - 1;
 
         let data = &self.y_data;
 
-        debug_assert_eq!(data[i_right], data[i_left]);
+        //debug_assert_eq!(data[i_right], data[i_left]);
 
         let from_peak_right = data.iter().skip(i_right + 1);
         let from_peak_left = data.iter().rev().skip(data.len() - i_left);
@@ -260,6 +338,8 @@ where
     /// specified at least on of the corresponding bounds in `PeakFinder<_>` -- the calculation of
     /// the property is skipped.
     ///
+    /// Peaks are sorted by their height.
+    ///
     /// # Examples
     ///
     /// ```
@@ -273,7 +353,7 @@ where
     ///
     /// assert_eq!(
     ///    ps.iter().map(|x| x.middle_position()).collect::<Vec<_>>(),
-    ///    vec![2, 4]
+    ///    vec![4, 2]
     /// );
     /// ```
     pub fn find_peaks(&self) -> Vec<Peak<T>> {
@@ -284,7 +364,8 @@ where
         let it = self
             .filter_prominence(self.filter_height(self.filter_plateau(self.get_local_maxima())));
 
-        it.collect()
+        let peaks = it.collect();
+        self.filter_distance(peaks)
     }
 
     pub fn with_min_height(&mut self, h: T) -> &mut Self {
@@ -338,6 +419,22 @@ where
         self.plateau_size.upper = Some(size);
         self
     }
+
+    pub fn with_min_distance(&mut self, distance: S) -> &mut Self {
+        let zero = distance.clone() - distance.clone();
+        assert!(zero.le(&distance), "Distance must be positive!");
+
+        self.distance.lower = Some(distance);
+        self
+    }
+
+    pub fn with_max_distance(&mut self, distance: S) -> &mut Self {
+        let zero = distance.clone() - distance.clone();
+        assert!(zero.le(&distance), "Distance must be positive!");
+
+        self.distance.upper = Some(distance);
+        self
+    }
 }
 
 #[cfg(test)]
@@ -354,19 +451,19 @@ mod tests {
             ps,
             vec![
                 Peak {
+                    position: 4..5,
+                    left_diff: 5.,
+                    right_diff: 5.,
+                    height: Some(5.),
+                    prominence: None
+                },
+                Peak {
                     position: 2..3,
                     left_diff: 1.,
                     right_diff: 3.,
                     height: Some(3.),
                     prominence: None
                 },
-                Peak {
-                    position: 4..5,
-                    left_diff: 5.,
-                    right_diff: 5.,
-                    height: Some(5.),
-                    prominence: None
-                }
             ]
         );
     }
@@ -382,18 +479,18 @@ mod tests {
             ps,
             vec![
                 Peak {
-                    position: 2..3,
-                    left_diff: 1.,
-                    right_diff: 3.,
-                    height: Some(3.),
-                    prominence: Some(2.)
-                },
-                Peak {
                     position: 4..5,
                     left_diff: 5.,
                     right_diff: 5.,
                     height: Some(5.),
                     prominence: Some(5.)
+                },
+                Peak {
+                    position: 2..3,
+                    left_diff: 1.,
+                    right_diff: 3.,
+                    height: Some(3.),
+                    prominence: Some(2.)
                 }
             ]
         );
@@ -412,18 +509,18 @@ mod tests {
             ps,
             vec![
                 Peak {
-                    position: 2..5,
-                    left_diff: 1.,
-                    right_diff: 3.,
-                    height: Some(3.),
-                    prominence: Some(2.)
-                },
-                Peak {
                     position: 6..8,
                     left_diff: 5.,
                     right_diff: 5.,
                     height: Some(5.),
                     prominence: Some(5.)
+                },
+                Peak {
+                    position: 2..5,
+                    left_diff: 1.,
+                    right_diff: 3.,
+                    height: Some(3.),
+                    prominence: Some(2.)
                 }
             ]
         );
@@ -462,6 +559,35 @@ mod tests {
                 height: Some(5.),
                 prominence: Some(5.)
             }]
+        );
+    }
+
+    #[test]
+    fn with_x() {
+        let y = [1., 2., 3., 0., 5., 0.];
+        let x: Vec<usize> = (1..(y.len() + 1)).collect();
+        let ps = PeakFinder::new_with_x(&y, &x)
+            .with_min_height(0.)
+            .with_min_distance(2)
+            .find_peaks();
+        assert_eq!(
+            ps,
+            vec![
+                Peak {
+                    position: 4..5,
+                    left_diff: 5.,
+                    right_diff: 5.,
+                    height: Some(5.),
+                    prominence: None
+                },
+                Peak {
+                    position: 2..3,
+                    left_diff: 1.,
+                    right_diff: 3.,
+                    height: Some(3.),
+                    prominence: None
+                }
+            ]
         );
     }
 
