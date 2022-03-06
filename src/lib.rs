@@ -4,7 +4,7 @@ use std::borrow::Cow;
 /// Struct containing the information of a found peak.
 ///
 /// Some values can be `None`s -- you have to specify at least one of the corresponding bounds in
-/// `PeakFinder`. If you don't, `find_peaks` skipps their calculation.
+/// `PeakFinder`. If you don't, `find_peaks` skips their calculation.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Peak<T> {
     /// range indices the peak spans
@@ -157,6 +157,7 @@ where
         }
     }
 
+    // TODO unsigned subtraction may fail
     fn get_local_maxima<'b>(&'b self) -> impl Iterator<Item = Peak<T>> + 'b {
         let zero = self.zero.clone().unwrap();
 
@@ -357,15 +358,21 @@ where
     /// );
     /// ```
     pub fn find_peaks(&self) -> Vec<Peak<T>> {
-        if [0, 1].contains(&self.y_data.len()) {
+        // there can be no peaks with less than 3 data points
+        if [0, 1, 2].contains(&self.y_data.len()) {
             return Vec::new();
         }
 
         let it = self
             .filter_prominence(self.filter_height(self.filter_plateau(self.get_local_maxima())));
 
-        let peaks = it.collect();
-        self.filter_distance(peaks)
+        let peaks: Vec<Peak<T>> = it.collect();
+
+        if peaks.is_empty() {
+            peaks
+        } else {
+            self.filter_distance(peaks)
+        }
     }
 
     pub fn with_min_height(&mut self, h: T) -> &mut Self {
@@ -595,8 +602,9 @@ mod tests {
     fn empty_data() {
         let y: Vec<u8> = vec![];
         let ps = PeakFinder::new(&y).with_min_prominence(1).find_peaks();
-
-        assert_eq!(ps, Vec::new())
+        let ps2 = PeakFinder::new(&y).with_min_distance(1).find_peaks();
+        assert_eq!(ps, Vec::new());
+        assert_eq!(ps2, Vec::new());
     }
 
     #[test]
@@ -604,14 +612,38 @@ mod tests {
         let y: Vec<u32> = vec![1];
         let ps = PeakFinder::new(&y).find_peaks();
 
-        assert_eq!(ps, vec![])
+        assert_eq!(ps, vec![]);
     }
 
     #[test]
     fn two_points() {
         let y: Vec<u32> = vec![2, 2];
         let ps = PeakFinder::new(&y).find_peaks();
+        let ps2 = PeakFinder::new(&y).with_min_prominence(3).with_min_distance(1).find_peaks();
 
-        assert_eq!(ps, vec![])
+        assert_eq!(ps, vec![]);
+        assert_eq!(ps2, vec![]);
+    }
+
+    #[test]
+    fn three_points() {
+        // TODO unsigned subtraction may fail -> try with u32
+        let y: Vec<i32> = vec![2,3,2];
+        let ps = PeakFinder::new(&y).with_min_height(0).find_peaks();
+        let ps2 = PeakFinder::new(&y).with_min_prominence(2).find_peaks();
+        let ps3 = PeakFinder::new(&y).with_min_prominence(2).with_min_distance(1).find_peaks();
+
+        assert_eq!(ps, 
+            vec![
+                Peak {
+                    position: 1..2 ,
+                    left_diff: 1,
+                    right_diff: 1,
+                    height: Some(3),
+                    prominence: None
+                },
+            ]);
+        assert_eq!(ps2, vec![]);
+        assert_eq!(ps3, vec![]);
     }
 }
