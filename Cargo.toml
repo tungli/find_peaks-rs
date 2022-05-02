@@ -1,6 +1,6 @@
 [package]
 name = "find_peaks"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["tungli <tun@mail.muni.cz>"]
 license = "MIT"
 edition = "2018"
@@ -16,8 +16,16 @@ documentation = "https://docs.rs/find_peaks/"
 [lib]
 crate-type = ["lib"]
 
+[dev-dependencies]
+pyo3 = "0.13"
+
 [dependencies]
+
 
 [[example]]
 name = "spectrum"
+crate-type = ["bin"]
+
+[[example]]
+name = "oil"
 crate-type = ["bin"]

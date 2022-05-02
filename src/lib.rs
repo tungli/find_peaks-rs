@@ -72,7 +72,8 @@ where
 /// Change the settings by using the methods for specifing the lower and upper bounds.
 #[derive(Clone)]
 pub struct PeakFinder<'a, T, S>
-    where [S]: ToOwned
+where
+    [S]: ToOwned,
 {
     y_data: &'a [T],
     x_data: Cow<'a, [S]>,
@@ -86,7 +87,7 @@ pub struct PeakFinder<'a, T, S>
 
 impl<'a, T> PeakFinder<'a, T, usize>
 where
-    T: Clone + std::ops::Sub<Output = T> + PartialOrd
+    T: Clone + std::ops::Sub<Output = T> + PartialOrd,
 {
     /// Initialize with a data slice.
     pub fn new(y_data: &'a [T]) -> Self {
@@ -273,36 +274,58 @@ where
         })
     }
 
-    fn filter_distance(&self, mut peaks: Vec<Peak<T>>) -> Vec<Peak<T>>
-    {   
-        peaks.sort_unstable_by(|a, b| b.height.partial_cmp(&a.height).unwrap_or(std::cmp::Ordering::Equal));
+    fn filter_distance(&self, mut peaks: Vec<Peak<T>>) -> Vec<Peak<T>> {
+        {
+            for p in &mut peaks {
+                let y = self.y_data[p.position.start].clone();
+                p.add_height(y);
+            }
+
+            peaks.sort_unstable_by(|a, b| {
+                b.height
+                    .partial_cmp(&a.height)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+        }
 
         let limit = &self.distance;
         if limit.is_empty() {
             return peaks;
-        }   
-
-        let mut filtered = Vec::with_capacity(peaks.len());
-        filtered.push(peaks[0].clone());
+        }
 
         let x_data = &self.x_data;
-        let mut x_prev = x_data[peaks[0].middle_position()].clone();
-        for i in 1..peaks.len() {
-            let x = x_data[peaks[i].middle_position()].clone();
-            let dist = if x > x_prev {
-                x.clone() - x_prev.clone()
-            } else {
-                x_prev.clone() - x.clone()
-            };  
-            if limit.is_inside(&dist) {
-                filtered.push(peaks[i].clone());
-                x_prev = x.clone();
-            }   
-        }   
+
+        let mut filtered = Vec::with_capacity(peaks.len());
+
+        let mut i = 0;
+        while i < peaks.len() {
+            filtered.push(peaks[0].clone());
+            let x_this = x_data[peaks[0].middle_position()].clone();
+
+            let mut to_keep = Vec::with_capacity(peaks.len());
+            for p in peaks[(i + 1)..].iter() {
+                let x_other = x_data[p.middle_position()].clone();
+
+                // done without abs because of trait bounds
+                let dist = if x_this > x_other {
+                    x_this.clone() - x_other.clone()
+                } else {
+                    x_other.clone() - x_this.clone()
+                };
+
+                if limit.is_inside(&dist) {
+                    to_keep.push(p.clone());
+                }
+            }
+
+            peaks = to_keep;
+
+            i += 1;
+        }
 
         filtered.shrink_to_fit();
         filtered
-    }  
+    }
 
     fn calc_prominence(&self, p: &Peak<T>) -> T {
         let i_left = p.position.start;
@@ -619,7 +642,10 @@ mod tests {
     fn two_points() {
         let y: Vec<u32> = vec![2, 2];
         let ps = PeakFinder::new(&y).find_peaks();
-        let ps2 = PeakFinder::new(&y).with_min_prominence(3).with_min_distance(1).find_peaks();
+        let ps2 = PeakFinder::new(&y)
+            .with_min_prominence(3)
+            .with_min_distance(1)
+            .find_peaks();
 
         assert_eq!(ps, vec![]);
         assert_eq!(ps2, vec![]);
@@ -628,21 +654,24 @@ mod tests {
     #[test]
     fn three_points() {
         // TODO unsigned subtraction may fail -> try with u32
-        let y: Vec<i32> = vec![2,3,2];
+        let y: Vec<i32> = vec![2, 3, 2];
         let ps = PeakFinder::new(&y).with_min_height(0).find_peaks();
         let ps2 = PeakFinder::new(&y).with_min_prominence(2).find_peaks();
-        let ps3 = PeakFinder::new(&y).with_min_prominence(2).with_min_distance(1).find_peaks();
+        let ps3 = PeakFinder::new(&y)
+            .with_min_prominence(2)
+            .with_min_distance(1)
+            .find_peaks();
 
-        assert_eq!(ps, 
-            vec![
-                Peak {
-                    position: 1..2 ,
-                    left_diff: 1,
-                    right_diff: 1,
-                    height: Some(3),
-                    prominence: None
-                },
-            ]);
+        assert_eq!(
+            ps,
+            vec![Peak {
+                position: 1..2,
+                left_diff: 1,
+                right_diff: 1,
+                height: Some(3),
+                prominence: None
+            },]
+        );
         assert_eq!(ps2, vec![]);
         assert_eq!(ps3, vec![]);
     }

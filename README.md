@@ -13,6 +13,7 @@ Filtering conditions that can be set are:
 * height,
 * the absolute value of the difference between neighboring data points,
 * number of plateau points a peak can have,
+* distance between peaks.
 
 All parameters can be specified by minimum and maximum bound.
 
