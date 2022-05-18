@@ -297,31 +297,28 @@ where
 
         let mut filtered = Vec::with_capacity(peaks.len());
 
-        let mut i = 0;
-        while i < peaks.len() {
+        while peaks.len() > 1 {
             filtered.push(peaks[0].clone());
-            let x_this = x_data[peaks[0].middle_position()].clone();
+            let x_i = x_data[peaks[0].middle_position()].clone();
 
-            let mut to_keep = Vec::with_capacity(peaks.len());
-            for p in peaks[(i + 1)..].iter() {
-                let x_other = x_data[p.middle_position()].clone();
+            peaks = peaks[1..]
+                .iter()
+                .cloned()
+                .filter(|p| {
+                    let x = x_data[p.middle_position()].clone();
 
-                // done without abs because of trait bounds
-                let dist = if x_this > x_other {
-                    x_this.clone() - x_other.clone()
-                } else {
-                    x_other.clone() - x_this.clone()
-                };
+                    // done without abs because of trait bounds
+                    let dist = if x_i > x {
+                        x_i.clone() - x.clone()
+                    } else {
+                        x.clone() - x_i.clone()
+                    };
 
-                if limit.is_inside(&dist) {
-                    to_keep.push(p.clone());
-                }
-            }
-
-            peaks = to_keep;
-
-            i += 1;
+                    limit.is_inside(&dist)
+                })
+                .collect();
         }
+        filtered.extend(peaks);
 
         filtered.shrink_to_fit();
         filtered
