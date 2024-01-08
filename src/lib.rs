@@ -159,7 +159,7 @@ where
     }
 
     // TODO unsigned subtraction may fail
-    fn get_local_maxima<'b>(&'b self) -> impl Iterator<Item = Peak<T>> + 'b {
+    fn get_local_maxima(&self) -> impl Iterator<Item = Peak<T>> + '_ {
         let zero = self.zero.clone().unwrap();
 
         let mut it = self.y_data.iter().cloned().enumerate();
@@ -216,12 +216,10 @@ where
             if empty {
                 // do nothing
                 Some(p)
+            } else if limit.is_inside(&p.position.len()) {
+                Some(p)
             } else {
-                if limit.is_inside(&p.position.len()) {
-                    Some(p)
-                } else {
-                    None
-                }
+                None
             }
         })
     }
@@ -303,8 +301,7 @@ where
 
             peaks = peaks[1..]
                 .iter()
-                .cloned()
-                .filter(|p| {
+                .filter(|&p| {
                     let x = x_data[p.middle_position()].clone();
 
                     // done without abs because of trait bounds
@@ -316,6 +313,7 @@ where
 
                     limit.is_inside(&dist)
                 })
+                .cloned()
                 .collect();
         }
         filtered.extend(peaks);
@@ -347,7 +345,7 @@ where
             (None, None) => self.zero.clone().unwrap(),
             (Some(v), None) => peak_height - v.clone(),
             (None, Some(v)) => peak_height - v.clone(),
-            (Some(v1), Some(v2)) => peak_height - (if v1.ge(&v2) { v1 } else { v2 }).clone(),
+            (Some(v1), Some(v2)) => peak_height - (if v1.ge(v2) { v1 } else { v2 }).clone(),
         }
         .clone()
     }

@@ -10,7 +10,7 @@ fn read_file(path: &str) -> std::io::Result<String> {
     Ok(contents)
 }
 
-fn main() -> () {
+fn main() {
     let data: Vec<f64> = read_file("data/spectrum.dat")
         .expect("File not read!")
         .as_str()
